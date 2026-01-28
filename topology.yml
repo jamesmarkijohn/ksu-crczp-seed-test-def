@@ -32,3 +32,9 @@ router_mappings:
   - router: r1
     network: net1
     ip: 10.10.0.1
+
+groups:
+  - name: all_nodes
+    nodes:
+      - ubuntu-host
+      - r1
