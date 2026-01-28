@@ -11,17 +11,17 @@ routers:
       image: ubuntu-noble-x86_64 #this may need to be changed to 20.04 (focal) per SEED docs
       mgmt_user: ubuntu
 
-networks:
-  - name: net1
-    cidr: 10.10.0.0/24
-    accessible_by_user: true
-
 hosts:
   - name: ubuntu-host
     flavor: standard.small
     base_box:
       image: ubuntu-noble-x86_64
       mgmt_user: ubuntu
+
+networks:
+  - name: net1
+    cidr: 10.10.0.0/24
+    accessible_by_user: true
 
 router_mappings:
   - router: r1
