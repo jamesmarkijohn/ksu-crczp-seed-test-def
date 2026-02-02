@@ -8,12 +8,17 @@
         append: true
         shell: /bin/bash
         create_home: true
-        password: "$6$OtcqMID40HCPh8U7$wLC30ns6ZozkW1sZQouh6a6XesOy7nenCbV42PjqGGRWN7W16x7SdVG8qsHmCV1IWT7/8UaqpnSXoUhk4rmpp."
+        password: "$6$REPLACE_WITH_SHA512_HASH"
 
-    - ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^PasswordAuthentication\s+'
-        line: 'PasswordAuthentication yes'
+    - ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/99-crczp-guac.conf
+        content: |
+          PasswordAuthentication yes
+          KbdInteractiveAuthentication yes
+          UsePAM yes
+        owner: root
+        group: root
+        mode: "0644"
 
     - ansible.builtin.service:
         name: ssh
