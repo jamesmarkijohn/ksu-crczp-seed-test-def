@@ -1,4 +1,4 @@
-name: seed-test-1
+name: gui-test
 
 hosts:
   - name: ubuntu-host
