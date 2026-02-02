@@ -1,7 +1,7 @@
 name: gui-test
 
 hosts:
-  - name: ubuntu-host
+  - name: kali-host
     flavor: standard.small
     base_box:
       image: kali
