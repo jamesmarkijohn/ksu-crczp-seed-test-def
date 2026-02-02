@@ -1,9 +1,9 @@
-- hosts: kali-host
+- hosts: ubuntu-host
   become: true
   gather_facts: false
   tasks:
     - ansible.builtin.user:
-        name: kali-user
+        name: ubuntu-user
         groups: sudo
         append: true
         shell: /bin/bash
