@@ -2,14 +2,14 @@ name: gui-test
 
 hosts:
   - name: kali-host
-    flavor: standard.small
+    flavor: standard.large
     base_box:
       image: kali
       mgmt_user: kali
 
 routers:
   - name: r1
-    flavor: standard.small
+    flavor: standard.medium
     base_box:
       image: ubuntu-noble-x86_64 #this may need to be changed to 20.04 (focal) per SEED docs
       mgmt_user: ubuntu
