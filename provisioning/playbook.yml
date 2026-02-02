@@ -8,7 +8,7 @@
         append: true
         shell: /bin/bash
         create_home: true
-        password: "$6$NktZYjbEUvqRKCoB$f1W02sqlmkK51KG8zW1jA0ORmaoGWa8W4BPOmjhfZSAagWs9YUY44Ay9zwd4Ig9wWmscIFWVi0k9QshDVs5aq."
+        password: "$6$OtcqMID40HCPh8U7$wLC30ns6ZozkW1sZQouh6a6XesOy7nenCbV42PjqGGRWN7W16x7SdVG8qsHmCV1IWT7/8UaqpnSXoUhk4rmpp."
 
     - ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
