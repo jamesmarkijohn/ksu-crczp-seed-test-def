@@ -1,8 +1,19 @@
 - hosts: ubuntu-host
   become: true
   gather_facts: false
+
+  vars:
+    desktop_choice: "gnome"
+
   tasks:
-    - ansible.builtin.user:
+    - name: Ensure Python & apt binidngs exist
+      ansible.builtin.raw: |
+        test -e /usr/bin/python3 || (apt-get update -y && apt-get install -y python3)
+        apt-get install -y python3-apt
+      changed_when: false
+
+    - name: Create ubuntu-user
+      ansible.builtin.user:
         name: ubuntu-user
         groups: sudo
         append: true
@@ -10,7 +21,8 @@
         create_home: true
         password: "$6$OtcqMID40HCPh8U7$wLC30ns6ZozkW1sZQouh6a6XesOy7nenCbV42PjqGGRWN7W16x7SdVG8qsHmCV1IWT7/8UaqpnSXoUhk4rmpp."
 
-    - ansible.builtin.copy:
+    - name: Allow SSH password auth
+      ansible.builtin.copy:
         dest: /etc/ssh/sshd_config.d/99-crczp-guac.conf
         content: |
           PasswordAuthentication yes
@@ -19,7 +31,45 @@
         owner: root
         group: root
         mode: "0644"
+      notify: Restart SSH
 
-    - ansible.builtin.service:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install GNOME minimal desktop
+      ansible.builtin.apt:
+        name:
+          - ubuntu-desktop-minimal
+          - spice-vdagent
+          - qemu-guest-agent
+        state: present
+        install_recommends: true
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      when: desktop_choice == "gnome"
+
+    - name: Ensure graphical boot target
+      ansible.builtin.command: systemctl set-default graphical.target
+      changed_when: true
+
+    - name: Enable guest agents
+      ansible.builtin.service:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop:
+        - qemu-guest-agent
+        - spice-vdagent
+      failed_when: false
+
+    - name: Reboot after GUI install
+      ansible.builtin.reboot:
+        reboot_timeout: 900
+
+  handlers:
+    - name: Restart SSH
+      ansible.builtin.service:
         name: ssh
         state: restarted
