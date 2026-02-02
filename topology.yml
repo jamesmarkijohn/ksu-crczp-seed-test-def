@@ -4,8 +4,8 @@ hosts:
   - name: ubuntu-host
     flavor: standard.small
     base_box:
-      image: ubuntu-noble-x86_64
-      mgmt_user: ubuntu
+      image: kali
+      mgmt_user: kali
 
 routers:
   - name: r1
@@ -24,7 +24,7 @@ networks:
     accessible_by_user: true
 
 net_mappings:
-  - host: ubuntu-host
+  - host: kali-host
     network: net1
     ip: 10.10.0.10
 
@@ -36,5 +36,5 @@ router_mappings:
 groups:
   - name: all-nodes
     nodes:
-      - ubuntu-host
+      - kali-host
       - r1
