@@ -1,1 +1,20 @@
-- hosts: all
+- hosts: ubuntu-host
+  become: true
+  gather_facts: false
+  tasks:
+    - ansible.builtin.user:
+        name: ubuntu-user
+        groups: sudo
+        append: true
+        shell: /bin/bash
+        create_home: true
+        password: "$6$NktZYjbEUvqRKCoB$f1W02sqlmkK51KG8zW1jA0ORmaoGWa8W4BPOmjhfZSAagWs9YUY44Ay9zwd4Ig9wWmscIFWVi0k9QshDVs5aq."
+
+    - ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication\s+'
+        line: 'PasswordAuthentication yes'
+
+    - ansible.builtin.service:
+        name: ssh
+        state: restarted
