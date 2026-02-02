@@ -1,17 +1,17 @@
 name: gui-test
 
 hosts:
-  - name: kali-host
+  - name: ubuntu-host
     flavor: standard.large
     base_box:
-      image: kali
-      mgmt_user: kali
+      image: ubuntu-noble-x86_64 #this may need to be changed to 20.04 (focal) per SEED docs
+      mgmt_user: ubuntu
 
 routers:
   - name: r1
-    flavor: standard.medium
+    flavor: standard.small
     base_box:
-      image: ubuntu-noble-x86_64 #this may need to be changed to 20.04 (focal) per SEED docs
+      image: ubuntu-noble-x86_64
       mgmt_user: ubuntu
 
 wan:
@@ -24,7 +24,7 @@ networks:
     accessible_by_user: true
 
 net_mappings:
-  - host: kali-host
+  - host: ubuntu-host
     network: net1
     ip: 10.10.0.10
 
@@ -36,5 +36,5 @@ router_mappings:
 groups:
   - name: all-nodes
     nodes:
-      - kali-host
+      - ubuntu-host
       - r1
