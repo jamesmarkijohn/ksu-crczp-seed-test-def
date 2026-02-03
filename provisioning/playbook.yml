@@ -1,135 +1,117 @@
 ---
-- name: Configure Ubuntu GUI + VNC for Apache Guacamole
+- name: Ubuntu GUI + VNC for Guacamole (XFCE + TigerVNC)
   hosts: ubuntu-host
   become: true
-
   vars:
-    guac_user: guac
-    guac_user_password_hash: "$6$OtcqMID40HCPh8U7$wLC30ns6ZozkW1sZQouh6a6XesOy7nenCbV42PjqGGRWN7W16x7SdVG8qsHmCV1IWT7/8UaqpnSXoUhk4rmpp."
-
-    sshd_dropin: /etc/ssh/sshd_config.d/99-guacamole.conf
-
-    vnc_display: 1
+    gui_user: guac
+    gui_user_password: "password"
+    vnc_password: "password"
+    vnc_display: "1"
     vnc_geometry: "1920x1080"
-    vnc_depth: 24
-    vnc_password: "ChangeMeVNC!"
-
-    gui_packages:
-      - xfce4
-      - xfce4-goodies
-      - dbus-x11
-      - x11-xserver-utils
-      - xfonts-base
-
-    vnc_packages:
-      - tigervnc-standalone-server
-      - tigervnc-common
-      - openssh-server
-      - qemu-guest-agent
+    vnc_depth: "24"
+    allow_vnc_nonlocal: true
 
   tasks:
-    - name: Update apt cache
-      ansible.builtin.apt:
+    - name: Install desktop + VNC packages (XFCE is lighter than GNOME)
+      apt:
         update_cache: true
-        cache_valid_time: 3600
-
-    - name: Install GUI + VNC + SSH packages
-      ansible.builtin.apt:
-        name: "{{ gui_packages + vnc_packages }}"
+        name:
+          - xfce4
+          - xfce4-goodies
+          - dbus-x11
+          - xauth
+          - x11-xserver-utils
+          - xterm
+          - tigervnc-standalone-server
+          - tigervnc-common
         state: present
 
-    - name: Ensure qemu-guest-agent is enabled
-      ansible.builtin.systemd:
-        name: qemu-guest-agent
-        enabled: true
-        state: started
-      ignore_errors: true
-
-    - name: Create Guacamole user
-      ansible.builtin.user:
-        name: "{{ guac_user }}"
+    - name: Create GUI user
+      user:
+        name: "{{ gui_user }}"
         shell: /bin/bash
+        create_home: true
         groups: sudo
         append: true
-        password: "{{ guac_user_password_hash }}"
-        create_home: true
 
-    - name: Enable SSH password authentication (drop-in)
-      ansible.builtin.copy:
-        dest: "{{ sshd_dropin }}"
+    - name: Set GUI user password (for SSH PasswordAuthentication)
+      command: bash -lc "echo '{{ gui_user }}:{{ gui_user_password }}' | chpasswd"
+
+    - name: Ensure SSH password auth is enabled (drop-in)
+      copy:
+        dest: /etc/ssh/sshd_config.d/99-crczp-passwordauth.conf
         owner: root
         group: root
         mode: "0644"
         content: |
           PasswordAuthentication yes
-          KbdInteractiveAuthentication yes
-          UsePAM yes
 
-    - name: Restart ssh
-      ansible.builtin.systemd:
+    - name: Restart SSH
+      service:
         name: ssh
         state: restarted
-      ignore_errors: true
 
-    - name: Ensure .vnc directory exists
-      ansible.builtin.file:
-        path: "/home/{{ guac_user }}/.vnc"
+    - name: Create ~/.vnc directory
+      file:
+        path: "/home/{{ gui_user }}/.vnc"
         state: directory
-        owner: "{{ guac_user }}"
-        group: "{{ guac_user }}"
+        owner: "{{ gui_user }}"
+        group: "{{ gui_user }}"
         mode: "0700"
 
-    - name: Set VNC password file
-      ansible.builtin.shell: |
+    - name: Create VNC password file (required or vncserver will fail)
+      shell: |
         set -euo pipefail
-        printf '%s\n' "{{ vnc_password }}" | vncpasswd -f > "/home/{{ guac_user }}/.vnc/passwd"
-        chown "{{ guac_user }}:{{ guac_user }}" "/home/{{ guac_user }}/.vnc/passwd"
-        chmod 0600 "/home/{{ guac_user }}/.vnc/passwd"
+        printf "%s\n" "{{ vnc_password }}" | vncpasswd -f > "/home/{{ gui_user }}/.vnc/passwd"
+        chown "{{ gui_user }}:{{ gui_user }}" "/home/{{ gui_user }}/.vnc/passwd"
+        chmod 0600 "/home/{{ gui_user }}/.vnc/passwd"
       args:
         executable: /bin/bash
 
-    - name: Create VNC xstartup to launch XFCE
-      ansible.builtin.copy:
-        dest: "/home/{{ guac_user }}/.vnc/xstartup"
-        owner: "{{ guac_user }}"
-        group: "{{ guac_user }}"
+    - name: Install xstartup to launch XFCE
+      copy:
+        dest: "/home/{{ gui_user }}/.vnc/xstartup"
+        owner: "{{ gui_user }}"
+        group: "{{ gui_user }}"
         mode: "0755"
         content: |
           #!/bin/sh
           unset SESSION_MANAGER
           unset DBUS_SESSION_BUS_ADDRESS
-          xrdb $HOME/.Xresources 2>/dev/null || true
-          startxfce4 &
+          exec startxfce4
 
-    - name: Install systemd template unit for VNC server
-      ansible.builtin.copy:
+    - name: Install systemd unit template for vncserver@.service
+      copy:
         dest: /etc/systemd/system/vncserver@.service
         owner: root
         group: root
         mode: "0644"
         content: |
           [Unit]
-          Description=TigerVNC Server for display :%i
+          Description=TigerVNC server on display :%i
           After=network.target
 
           [Service]
           Type=forking
-          User={{ guac_user }}
+          User={{ gui_user }}
           PAMName=login
-          PIDFile=/home/{{ guac_user }}/.vnc/%H:%i.pid
+          PIDFile=/home/{{ gui_user }}/.vnc/%H:%i.pid
           ExecStartPre=-/usr/bin/vncserver -kill :%i
-          ExecStart=/usr/bin/vncserver :%i -geometry {{ vnc_geometry }} -depth {{ vnc_depth }} -localhost no -rfbauth /home/{{ guac_user }}/.vnc/passwd
+          ExecStart=/usr/bin/vncserver :%i -geometry {{ vnc_geometry }} -depth {{ vnc_depth }} {{ "-localhost no" if allow_vnc_nonlocal else "-localhost yes" }}
           ExecStop=/usr/bin/vncserver -kill :%i
 
           [Install]
           WantedBy=multi-user.target
 
     - name: Reload systemd
-      ansible.builtin.systemd:
+      systemd:
         daemon_reload: true
 
     - name: Enable and start VNC server on :{{ vnc_display }} (TCP 590{{ vnc_display }})
-      ansible.builtin.systemd:
+      systemd:
         name: "vncserver@{{ vnc_display }}"
         enabled: true
         state: started
+
+    - name: Ensure system boots into graphical target (optional but fine)
+      command: systemctl set-default graphical.target
