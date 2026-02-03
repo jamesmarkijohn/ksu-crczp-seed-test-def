@@ -9,6 +9,8 @@
     vnc_geometry: "1920x1080"
     vnc_depth: "24"
     allow_vnc_nonlocal: true
+    vnc_localhost_flag: "{{ '-localhost no' if allow_vnc_nonlocal else '-localhost yes' }}"
+    vnc_cfg_dir: "/home/{{ vnc_user }}/.config/tigervnc"
 
   tasks:
     - name: Install XFCE + TigerVNC
@@ -23,12 +25,16 @@
           - tigervnc-common
         state: present
 
-    - name: Get short hostname (used in PIDFile path)
-      ansible.builtin.command: hostname -s
-      register: hn
-      changed_when: false
+    # Optional: keep ~/.vnc present, but treat ~/.config/tigervnc as canonical on Kali
+    - name: Ensure TigerVNC config dir exists (canonical on Kali)
+      ansible.builtin.file:
+        path: "{{ vnc_cfg_dir }}"
+        state: directory
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
+        mode: "0700"
 
-    - name: Ensure ~/.vnc exists
+    - name: Ensure ~/.vnc exists (may be a symlink to ~/.config/tigervnc on Kali)
       ansible.builtin.file:
         path: "/home/{{ vnc_user }}/.vnc"
         state: directory
@@ -36,18 +42,18 @@
         group: "{{ vnc_user }}"
         mode: "0700"
 
-    - name: Set VNC password file
+    - name: Set VNC password file (write to ~/.config/tigervnc)
       ansible.builtin.shell: |
         set -euo pipefail
-        printf "%s\n" "{{ vnc_password }}" | vncpasswd -f > "/home/{{ vnc_user }}/.vnc/passwd"
-        chown "{{ vnc_user }}:{{ vnc_user }}" "/home/{{ vnc_user }}/.vnc/passwd"
-        chmod 0600 "/home/{{ vnc_user }}/.vnc/passwd"
+        printf "%s\n" "{{ vnc_password }}" | vncpasswd -f > "{{ vnc_cfg_dir }}/passwd"
+        chown "{{ vnc_user }}:{{ vnc_user }}" "{{ vnc_cfg_dir }}/passwd"
+        chmod 0600 "{{ vnc_cfg_dir }}/passwd"
       args:
         executable: /bin/bash
 
-    - name: Set xstartup to launch XFCE (with dbus-launch)
+    - name: Set xstartup to launch XFCE (with dbus-launch) (write to ~/.config/tigervnc)
       ansible.builtin.copy:
-        dest: "/home/{{ vnc_user }}/.vnc/xstartup"
+        dest: "{{ vnc_cfg_dir }}/xstartup"
         owner: "{{ vnc_user }}"
         group: "{{ vnc_user }}"
         mode: "0755"
@@ -61,11 +67,12 @@
       ansible.builtin.shell: |
         rm -f /tmp/.X{{ vnc_display }}-lock /tmp/.X11-unix/X{{ vnc_display }} || true
         rm -f /home/{{ vnc_user }}/.vnc/*:{{ vnc_display }}.pid || true
+        rm -f {{ vnc_cfg_dir }}/*:{{ vnc_display }}.pid || true
       args:
         executable: /bin/bash
       changed_when: false
 
-    - name: Install vncserver@.service (PIDFile uses resolved short hostname)
+    - name: Install vncserver@.service (systemd-managed, no PIDFile; runs in foreground)
       ansible.builtin.copy:
         dest: /etc/systemd/system/vncserver@.service
         owner: root
@@ -77,13 +84,17 @@
           After=network.target
 
           [Service]
-          Type=forking
+          Type=simple
           User={{ vnc_user }}
           PAMName=login
-          PIDFile=/home/{{ vnc_user }}/.vnc/{{ hn.stdout }}:%i.pid
+          WorkingDirectory=/home/{{ vnc_user }}
+
           ExecStartPre=-/usr/bin/vncserver -kill :%i
-          ExecStart=/usr/bin/vncserver :%i -geometry {{ vnc_geometry }} -depth {{ vnc_depth }} {{ "-localhost no" if allow_vnc_nonlocal else "-localhost yes" }}
+          ExecStart=/usr/bin/vncserver :%i -fg -geometry {{ vnc_geometry }} -depth {{ vnc_depth }} {{ vnc_localhost_flag }}
           ExecStop=/usr/bin/vncserver -kill :%i
+
+          Restart=on-failure
+          RestartSec=2
 
           [Install]
           WantedBy=multi-user.target
@@ -113,17 +124,21 @@
           changed_when: false
           failed_when: false
 
-        - name: List ~/.vnc and show last 200 lines of any VNC log
+        - name: List ~/.vnc and ~/.config/tigervnc and show last 200 lines of logs
           ansible.builtin.shell: |
             set -e
             echo "### ls -la /home/{{ vnc_user }}/.vnc"
             ls -la /home/{{ vnc_user }}/.vnc || true
             echo
-            echo "### tail of VNC logs"
-            ls -1 /home/{{ vnc_user }}/.vnc/*.log 2>/dev/null | tail -n 5 | while read f; do
-              echo "----- $f -----"
-              tail -n 200 "$f" || true
-            done
+            echo "### ls -la {{ vnc_cfg_dir }}"
+            ls -la {{ vnc_cfg_dir }} || true
+            echo
+            echo "### tail of VNC logs (both locations)"
+            (ls -1 /home/{{ vnc_user }}/.vnc/*.log 2>/dev/null; ls -1 {{ vnc_cfg_dir }}/*.log 2>/dev/null) \
+              | sort -u | tail -n 10 | while read f; do
+                echo "----- $f -----"
+                tail -n 200 "$f" || true
+              done
           args:
             executable: /bin/bash
           register: vnc_files
@@ -141,7 +156,7 @@
               {{ vnc_journal.stdout | default('') }}
               {{ vnc_journal.stderr | default('') }}
 
-              ===== ~/.vnc logs =====
+              ===== ~/.vnc + ~/.config/tigervnc logs =====
               {{ vnc_files.stdout | default('') }}
               {{ vnc_files.stderr | default('') }}
 
