@@ -1,45 +1,135 @@
-- hosts: ubuntu-host
+---
+- name: Configure Ubuntu GUI + VNC for Apache Guacamole
+  hosts: all
   become: true
-  gather_facts: false
 
   vars:
-    desktop_choice: "gnome"
+    guac_user: guac
+    guac_user_password_hash: "$6$OtcqMID40HCPh8U7$wLC30ns6ZozkW1sZQouh6a6XesOy7nenCbV42PjqGGRWN7W16x7SdVG8qsHmCV1IWT7/8UaqpnSXoUhk4rmpp."
+
+    sshd_dropin: /etc/ssh/sshd_config.d/99-guacamole.conf
+
+    vnc_display: 1
+    vnc_geometry: "1920x1080"
+    vnc_depth: 24
+    vnc_password: "ChangeMeVNC!"
+
+    gui_packages:
+      - xfce4
+      - xfce4-goodies
+      - dbus-x11
+      - x11-xserver-utils
+      - xfonts-base
+
+    vnc_packages:
+      - tigervnc-standalone-server
+      - tigervnc-common
+      - openssh-server
+      - qemu-guest-agent
 
   tasks:
-    - name: Ensure Python & apt binidngs exist
-      ansible.builtin.raw: |
-        test -e /usr/bin/python3 || (apt-get install -y python3)
-        apt-get install -y python3-apt
-      changed_when: false
-
-    - name: Create ubuntu-user
-      ansible.builtin.user:
-        name: ubuntu-user
-        groups: sudo
-        append: true
-        shell: /bin/bash
-        create_home: true
-        password: "$6$OtcqMID40HCPh8U7$wLC30ns6ZozkW1sZQouh6a6XesOy7nenCbV42PjqGGRWN7W16x7SdVG8qsHmCV1IWT7/8UaqpnSXoUhk4rmpp."
-
-    - name: Allow SSH password auth
-      ansible.builtin.copy:
-        dest: /etc/ssh/sshd_config.d/99-crczp-guac.conf
-        content: |
-          PasswordAuthentication yes
-          KbdInteractiveAuthentication yes
-          UsePAM yes
-        owner: root
-        group: root
-        mode: "0644"
-      notify: Restart SSH
-
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
 
-  handlers:
-    - name: Restart SSH
-      ansible.builtin.service:
+    - name: Install GUI + VNC + SSH packages
+      ansible.builtin.apt:
+        name: "{{ gui_packages + vnc_packages }}"
+        state: present
+
+    - name: Ensure qemu-guest-agent is enabled
+      ansible.builtin.systemd:
+        name: qemu-guest-agent
+        enabled: true
+        state: started
+      ignore_errors: true
+
+    - name: Create Guacamole user
+      ansible.builtin.user:
+        name: "{{ guac_user }}"
+        shell: /bin/bash
+        groups: sudo
+        append: true
+        password: "{{ guac_user_password_hash }}"
+        create_home: true
+
+    - name: Enable SSH password authentication (drop-in)
+      ansible.builtin.copy:
+        dest: "{{ sshd_dropin }}"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          PasswordAuthentication yes
+          KbdInteractiveAuthentication yes
+          UsePAM yes
+
+    - name: Restart ssh
+      ansible.builtin.systemd:
         name: ssh
         state: restarted
+      ignore_errors: true
+
+    - name: Ensure .vnc directory exists
+      ansible.builtin.file:
+        path: "/home/{{ guac_user }}/.vnc"
+        state: directory
+        owner: "{{ guac_user }}"
+        group: "{{ guac_user }}"
+        mode: "0700"
+
+    - name: Set VNC password file
+      ansible.builtin.shell: |
+        set -euo pipefail
+        printf '%s\n' "{{ vnc_password }}" | vncpasswd -f > "/home/{{ guac_user }}/.vnc/passwd"
+        chown "{{ guac_user }}:{{ guac_user }}" "/home/{{ guac_user }}/.vnc/passwd"
+        chmod 0600 "/home/{{ guac_user }}/.vnc/passwd"
+      args:
+        executable: /bin/bash
+
+    - name: Create VNC xstartup to launch XFCE
+      ansible.builtin.copy:
+        dest: "/home/{{ guac_user }}/.vnc/xstartup"
+        owner: "{{ guac_user }}"
+        group: "{{ guac_user }}"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          unset SESSION_MANAGER
+          unset DBUS_SESSION_BUS_ADDRESS
+          xrdb $HOME/.Xresources 2>/dev/null || true
+          startxfce4 &
+
+    - name: Install systemd template unit for VNC server
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/vncserver@.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=TigerVNC Server for display :%i
+          After=network.target
+
+          [Service]
+          Type=forking
+          User={{ guac_user }}
+          PAMName=login
+          PIDFile=/home/{{ guac_user }}/.vnc/%H:%i.pid
+          ExecStartPre=-/usr/bin/vncserver -kill :%i
+          ExecStart=/usr/bin/vncserver :%i -geometry {{ vnc_geometry }} -depth {{ vnc_depth }} -localhost no -rfbauth /home/{{ guac_user }}/.vnc/passwd
+          ExecStop=/usr/bin/vncserver -kill :%i
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Enable and start VNC server on :{{ vnc_display }} (TCP 590{{ vnc_display }})
+      ansible.builtin.systemd:
+        name: "vncserver@{{ vnc_display }}"
+        enabled: true
+        state: started
