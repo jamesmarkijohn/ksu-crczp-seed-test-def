@@ -4,13 +4,15 @@
   become: true
   vars:
     vnc_user: kali
-    vnc_password: "password"
+    vnc_password: "kali@VNC1"
     vnc_display: "1"
     vnc_geometry: "1920x1080"
     vnc_depth: "24"
     allow_vnc_nonlocal: true
     vnc_localhost_flag: "{{ '-localhost no' if allow_vnc_nonlocal else '-localhost yes' }}"
     vnc_cfg_dir: "/home/{{ vnc_user }}/.config/tigervnc"
+    gui_login_user: "kali-user"
+    gui_login_password: "GUIpass123!"
 
   tasks:
     - name: Install XFCE + TigerVNC
@@ -25,7 +27,17 @@
           - tigervnc-common
         state: present
 
-    # Optional: keep ~/.vnc present, but treat ~/.config/tigervnc as canonical on Kali
+    - name: Create GUI login user
+      ansible.builtin.user:
+        name: "{{ gui_login_user }}"
+        shell: /bin/bash
+        create_home: true
+        groups: sudo
+        append: true
+
+    - name: Set GUI login user password
+      ansible.builtin.command: bash -lc "echo '{{ gui_login_user }}:{{ gui_login_password }}' | chpasswd"
+
     - name: Ensure TigerVNC config dir exists (canonical on Kali)
       ansible.builtin.file:
         path: "{{ vnc_cfg_dir }}"
@@ -34,7 +46,7 @@
         group: "{{ vnc_user }}"
         mode: "0700"
 
-    - name: Ensure ~/.vnc exists (may be a symlink to ~/.config/tigervnc on Kali)
+    - name: Ensure ~/.vnc exists
       ansible.builtin.file:
         path: "/home/{{ vnc_user }}/.vnc"
         state: directory
@@ -42,7 +54,7 @@
         group: "{{ vnc_user }}"
         mode: "0700"
 
-    - name: Set VNC password file (write to ~/.config/tigervnc)
+    - name: Set VNC password file
       ansible.builtin.shell: |
         set -euo pipefail
         printf "%s\n" "{{ vnc_password }}" | vncpasswd -f > "{{ vnc_cfg_dir }}/passwd"
@@ -51,7 +63,7 @@
       args:
         executable: /bin/bash
 
-    - name: Set xstartup to launch XFCE (with dbus-launch) (write to ~/.config/tigervnc)
+    - name: Set xstartup to launch XFCE (with dbus-launch)
       ansible.builtin.copy:
         dest: "{{ vnc_cfg_dir }}/xstartup"
         owner: "{{ vnc_user }}"
@@ -72,7 +84,7 @@
         executable: /bin/bash
       changed_when: false
 
-    - name: Install vncserver@.service (systemd-managed, no PIDFile; runs in foreground)
+    - name: Install vncserver@.service
       ansible.builtin.copy:
         dest: /etc/systemd/system/vncserver@.service
         owner: root
