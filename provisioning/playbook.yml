@@ -12,7 +12,7 @@
 
   tasks:
     - name: Install XFCE + TigerVNC
-      apt:
+      ansible.builtin.apt:
         update_cache: true
         name:
           - xfce4
@@ -23,8 +23,13 @@
           - tigervnc-common
         state: present
 
+    - name: Get short hostname (used in PIDFile path)
+      ansible.builtin.command: hostname -s
+      register: hn
+      changed_when: false
+
     - name: Ensure ~/.vnc exists
-      file:
+      ansible.builtin.file:
         path: "/home/{{ vnc_user }}/.vnc"
         state: directory
         owner: "{{ vnc_user }}"
@@ -32,7 +37,7 @@
         mode: "0700"
 
     - name: Set VNC password file
-      shell: |
+      ansible.builtin.shell: |
         set -euo pipefail
         printf "%s\n" "{{ vnc_password }}" | vncpasswd -f > "/home/{{ vnc_user }}/.vnc/passwd"
         chown "{{ vnc_user }}:{{ vnc_user }}" "/home/{{ vnc_user }}/.vnc/passwd"
@@ -40,8 +45,8 @@
       args:
         executable: /bin/bash
 
-    - name: Set xstartup to launch XFCE
-      copy:
+    - name: Set xstartup to launch XFCE (with dbus-launch)
+      ansible.builtin.copy:
         dest: "/home/{{ vnc_user }}/.vnc/xstartup"
         owner: "{{ vnc_user }}"
         group: "{{ vnc_user }}"
@@ -50,10 +55,18 @@
           #!/bin/sh
           unset SESSION_MANAGER
           unset DBUS_SESSION_BUS_ADDRESS
-          exec startxfce4
+          exec dbus-launch --exit-with-session startxfce4
 
-    - name: Install vncserver@.service
-      copy:
+    - name: Remove stale VNC/X locks for display :{{ vnc_display }}
+      ansible.builtin.shell: |
+        rm -f /tmp/.X{{ vnc_display }}-lock /tmp/.X11-unix/X{{ vnc_display }} || true
+        rm -f /home/{{ vnc_user }}/.vnc/*:{{ vnc_display }}.pid || true
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Install vncserver@.service (PIDFile uses resolved short hostname)
+      ansible.builtin.copy:
         dest: /etc/systemd/system/vncserver@.service
         owner: root
         group: root
@@ -67,7 +80,7 @@
           Type=forking
           User={{ vnc_user }}
           PAMName=login
-          PIDFile=/home/{{ vnc_user }}/.vnc/%H:%i.pid
+          PIDFile=/home/{{ vnc_user }}/.vnc/{{ hn.stdout }}:%i.pid
           ExecStartPre=-/usr/bin/vncserver -kill :%i
           ExecStart=/usr/bin/vncserver :%i -geometry {{ vnc_geometry }} -depth {{ vnc_depth }} {{ "-localhost no" if allow_vnc_nonlocal else "-localhost yes" }}
           ExecStop=/usr/bin/vncserver -kill :%i
@@ -76,11 +89,62 @@
           WantedBy=multi-user.target
 
     - name: Reload systemd
-      systemd:
+      ansible.builtin.systemd:
         daemon_reload: true
 
-    - name: Start VNC on :{{ vnc_display }} (TCP 590{{ vnc_display }})
-      systemd:
-        name: "vncserver@{{ vnc_display }}"
-        state: started
-        enabled: true
+    - name: Start VNC on :{{ vnc_display }} (TCP 590{{ vnc_display }}) with diagnostics on failure
+      block:
+        - name: Start VNC service
+          ansible.builtin.systemd:
+            name: "vncserver@{{ vnc_display }}"
+            state: started
+            enabled: true
+
+      rescue:
+        - name: systemctl status vncserver@{{ vnc_display }}
+          ansible.builtin.command: "systemctl status vncserver@{{ vnc_display }} --no-pager -l"
+          register: vnc_status
+          changed_when: false
+          failed_when: false
+
+        - name: journalctl for vncserver@{{ vnc_display }}
+          ansible.builtin.command: "journalctl -xeu vncserver@{{ vnc_display }} --no-pager -n 200"
+          register: vnc_journal
+          changed_when: false
+          failed_when: false
+
+        - name: List ~/.vnc and show last 200 lines of any VNC log
+          ansible.builtin.shell: |
+            set -e
+            echo "### ls -la /home/{{ vnc_user }}/.vnc"
+            ls -la /home/{{ vnc_user }}/.vnc || true
+            echo
+            echo "### tail of VNC logs"
+            ls -1 /home/{{ vnc_user }}/.vnc/*.log 2>/dev/null | tail -n 5 | while read f; do
+              echo "----- $f -----"
+              tail -n 200 "$f" || true
+            done
+          args:
+            executable: /bin/bash
+          register: vnc_files
+          changed_when: false
+          failed_when: false
+
+        - name: Print diagnostics
+          ansible.builtin.debug:
+            msg: |
+              ===== systemctl status =====
+              {{ vnc_status.stdout | default('') }}
+              {{ vnc_status.stderr | default('') }}
+
+              ===== journalctl =====
+              {{ vnc_journal.stdout | default('') }}
+              {{ vnc_journal.stderr | default('') }}
+
+              ===== ~/.vnc logs =====
+              {{ vnc_files.stdout | default('') }}
+              {{ vnc_files.stderr | default('') }}
+
+        - name: Fail provisioning with captured diagnostics
+          ansible.builtin.fail:
+            msg: "VNC service failed to start; see diagnostics above."
