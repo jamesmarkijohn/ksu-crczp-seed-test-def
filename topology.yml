@@ -1,10 +1,10 @@
-name: gui-test
+name: seed-gui-test
 
 hosts:
-  - name: kali-host
-    flavor: standard.large
+  - name: ubuntu-host
+    flavor: standard.small
     base_box:
-      image: kali
+      image: ubuntu-20.04-server-cloudimg-amd64
       mgmt_user: debian
 
 routers:
@@ -24,7 +24,7 @@ networks:
     accessible_by_user: true
 
 net_mappings:
-  - host: kali-host
+  - host: ubuntu-host
     network: net1
     ip: 10.10.0.10
 
@@ -36,5 +36,5 @@ router_mappings:
 groups:
   - name: all-nodes
     nodes:
-      - kali-host
+      - ubuntu-host
       - r1
