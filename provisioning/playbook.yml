@@ -1,6 +1,6 @@
 ---
 - name: Configure Ubuntu GUI + VNC for Apache Guacamole
-  hosts: all
+  hosts: ubuntu-host
   become: true
 
   vars:
