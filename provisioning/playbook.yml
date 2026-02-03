@@ -94,11 +94,23 @@
           [Service]
           Type=forking
           User={{ gui_user }}
-          PAMName=login
-          PIDFile=/home/{{ gui_user }}/.vnc/%H:%i.pid
+          Group={{ gui_user }}
+          WorkingDirectory=/home/{{ gui_user }}
+          Environment=HOME=/home/{{ gui_user }}
+          Environment=USER={{ gui_user }}
+
+          # TigerVNC creates: ~/.vnc/<hostname>:<display>.pid
+          PIDFile=/home/{{ gui_user }}/.vnc/{{ ansible_hostname }}:%i.pid
+
+          ExecStartPre=/usr/bin/test -f /home/{{ gui_user }}/.vnc/passwd
           ExecStartPre=-/usr/bin/vncserver -kill :%i
           ExecStart=/usr/bin/vncserver :%i -geometry {{ vnc_geometry }} -depth {{ vnc_depth }} {{ "-localhost no" if allow_vnc_nonlocal else "-localhost yes" }}
           ExecStop=/usr/bin/vncserver -kill :%i
+
+          Restart=on-failure
+          RestartSec=2
+          TimeoutStartSec=60
+          GuessMainPID=yes
 
           [Install]
           WantedBy=multi-user.target
@@ -107,11 +119,27 @@
       systemd:
         daemon_reload: true
 
-    - name: Enable and start VNC server on :{{ vnc_display }} (TCP 590{{ vnc_display }})
-      systemd:
-        name: "vncserver@{{ vnc_display }}"
-        enabled: true
-        state: started
+    - name: Enable and start VNC server on :{{ vnc_display }}
+      block:
+        - systemd:
+            daemon_reload: true
+
+        - systemd:
+            name: "vncserver@{{ vnc_display }}"
+            enabled: true
+            state: started
+
+      rescue:
+        - name: Dump VNC service status
+          shell: |
+            set -x
+            hostname
+            id {{ gui_user }}
+            ls -la /home/{{ gui_user }}/.vnc || true
+            systemctl status vncserver@{{ vnc_display }} --no-pager -l || true
+            journalctl -u vncserver@{{ vnc_display }} --no-pager -n 200 || true
+          args:
+            executable: /bin/bash
 
     - name: Ensure system boots into graphical target (optional but fine)
       command: systemctl set-default graphical.target
