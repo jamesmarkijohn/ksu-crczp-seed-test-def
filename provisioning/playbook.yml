@@ -1,10 +1,9 @@
 ---
-- name: Ubuntu GUI + VNC for Guacamole (XFCE + TigerVNC)
-  hosts: ubuntu-host
+- name: Kali GUI via VNC (XFCE + TigerVNC) for Guacamole
+  hosts: kali-host
   become: true
   vars:
-    gui_user: guac
-    gui_user_password: "password"
+    vnc_user: kali
     vnc_password: "password"
     vnc_display: "1"
     vnc_geometry: "1920x1080"
@@ -12,7 +11,7 @@
     allow_vnc_nonlocal: true
 
   tasks:
-    - name: Install desktop + VNC packages (XFCE is lighter than GNOME)
+    - name: Install XFCE + TigerVNC
       apt:
         update_cache: true
         name:
@@ -20,59 +19,32 @@
           - xfce4-goodies
           - dbus-x11
           - xauth
-          - x11-xserver-utils
-          - xterm
           - tigervnc-standalone-server
           - tigervnc-common
         state: present
 
-    - name: Create GUI user
-      user:
-        name: "{{ gui_user }}"
-        shell: /bin/bash
-        create_home: true
-        groups: sudo
-        append: true
-
-    - name: Set GUI user password (for SSH PasswordAuthentication)
-      command: bash -lc "echo '{{ gui_user }}:{{ gui_user_password }}' | chpasswd"
-
-    - name: Ensure SSH password auth is enabled (drop-in)
-      copy:
-        dest: /etc/ssh/sshd_config.d/99-crczp-passwordauth.conf
-        owner: root
-        group: root
-        mode: "0644"
-        content: |
-          PasswordAuthentication yes
-
-    - name: Restart SSH
-      service:
-        name: ssh
-        state: restarted
-
-    - name: Create ~/.vnc directory
+    - name: Ensure ~/.vnc exists
       file:
-        path: "/home/{{ gui_user }}/.vnc"
+        path: "/home/{{ vnc_user }}/.vnc"
         state: directory
-        owner: "{{ gui_user }}"
-        group: "{{ gui_user }}"
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
         mode: "0700"
 
-    - name: Create VNC password file (required or vncserver will fail)
+    - name: Set VNC password file
       shell: |
         set -euo pipefail
-        printf "%s\n" "{{ vnc_password }}" | vncpasswd -f > "/home/{{ gui_user }}/.vnc/passwd"
-        chown "{{ gui_user }}:{{ gui_user }}" "/home/{{ gui_user }}/.vnc/passwd"
-        chmod 0600 "/home/{{ gui_user }}/.vnc/passwd"
+        printf "%s\n" "{{ vnc_password }}" | vncpasswd -f > "/home/{{ vnc_user }}/.vnc/passwd"
+        chown "{{ vnc_user }}:{{ vnc_user }}" "/home/{{ vnc_user }}/.vnc/passwd"
+        chmod 0600 "/home/{{ vnc_user }}/.vnc/passwd"
       args:
         executable: /bin/bash
 
-    - name: Install xstartup to launch XFCE
+    - name: Set xstartup to launch XFCE
       copy:
-        dest: "/home/{{ gui_user }}/.vnc/xstartup"
-        owner: "{{ gui_user }}"
-        group: "{{ gui_user }}"
+        dest: "/home/{{ vnc_user }}/.vnc/xstartup"
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
         mode: "0755"
         content: |
           #!/bin/sh
@@ -80,7 +52,7 @@
           unset DBUS_SESSION_BUS_ADDRESS
           exec startxfce4
 
-    - name: Install systemd unit template for vncserver@.service
+    - name: Install vncserver@.service
       copy:
         dest: /etc/systemd/system/vncserver@.service
         owner: root
@@ -93,24 +65,12 @@
 
           [Service]
           Type=forking
-          User={{ gui_user }}
-          Group={{ gui_user }}
-          WorkingDirectory=/home/{{ gui_user }}
-          Environment=HOME=/home/{{ gui_user }}
-          Environment=USER={{ gui_user }}
-
-          # TigerVNC creates: ~/.vnc/<hostname>:<display>.pid
-          PIDFile=/home/{{ gui_user }}/.vnc/{{ ansible_hostname }}:%i.pid
-
-          ExecStartPre=/usr/bin/test -f /home/{{ gui_user }}/.vnc/passwd
+          User={{ vnc_user }}
+          PAMName=login
+          PIDFile=/home/{{ vnc_user }}/.vnc/%H:%i.pid
           ExecStartPre=-/usr/bin/vncserver -kill :%i
           ExecStart=/usr/bin/vncserver :%i -geometry {{ vnc_geometry }} -depth {{ vnc_depth }} {{ "-localhost no" if allow_vnc_nonlocal else "-localhost yes" }}
           ExecStop=/usr/bin/vncserver -kill :%i
-
-          Restart=on-failure
-          RestartSec=2
-          TimeoutStartSec=60
-          GuessMainPID=yes
 
           [Install]
           WantedBy=multi-user.target
@@ -119,27 +79,8 @@
       systemd:
         daemon_reload: true
 
-    - name: Enable and start VNC server on :{{ vnc_display }}
-      block:
-        - systemd:
-            daemon_reload: true
-
-        - systemd:
-            name: "vncserver@{{ vnc_display }}"
-            enabled: true
-            state: started
-
-      rescue:
-        - name: Dump VNC service status
-          shell: |
-            set -x
-            hostname
-            id {{ gui_user }}
-            ls -la /home/{{ gui_user }}/.vnc || true
-            systemctl status vncserver@{{ vnc_display }} --no-pager -l || true
-            journalctl -u vncserver@{{ vnc_display }} --no-pager -n 200 || true
-          args:
-            executable: /bin/bash
-
-    - name: Ensure system boots into graphical target (optional but fine)
-      command: systemctl set-default graphical.target
+    - name: Start VNC on :{{ vnc_display }} (TCP 590{{ vnc_display }})
+      systemd:
+        name: "vncserver@{{ vnc_display }}"
+        state: started
+        enabled: true
