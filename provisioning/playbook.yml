@@ -1,9 +1,9 @@
 ---
-- name: Kali GUI via VNC (XFCE + TigerVNC) for Guacamole
-  hosts: kali-host
+- name: Ubuntu GUI via VNC (XFCE + TigerVNC) for Guacamole
+  hosts: ubuntu-host
   become: true
   vars:
-    vnc_user: kali
+    vnc_user: ubuntu
     vnc_password: "password"
     vnc_display: "1"
     vnc_geometry: "1920x1080"
@@ -11,7 +11,7 @@
     allow_vnc_nonlocal: true
     vnc_localhost_flag: "{{ '-localhost no' if allow_vnc_nonlocal else '-localhost yes' }}"
     vnc_cfg_dir: "/home/{{ vnc_user }}/.config/tigervnc"
-    gui_login_user: "kali-user"
+    gui_login_user: "ubuntu-user"
     gui_login_password: "password123"
 
   tasks:
