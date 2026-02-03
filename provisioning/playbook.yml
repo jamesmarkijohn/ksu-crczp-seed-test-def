@@ -8,7 +8,7 @@
   tasks:
     - name: Ensure Python & apt binidngs exist
       ansible.builtin.raw: |
-        test -e /usr/bin/python3 || (apt-get update -y && apt-get install -y python3)
+        test -e /usr/bin/python3 || (apt-get install -y python3)
         apt-get install -y python3-apt
       changed_when: false
 
