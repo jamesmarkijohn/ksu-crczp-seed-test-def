@@ -5,7 +5,7 @@ hosts:
     flavor: standard.large
     base_box:
       image: kali
-      mgmt_user: root
+      mgmt_user: debian
 
 routers:
   - name: r1
