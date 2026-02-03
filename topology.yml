@@ -5,7 +5,7 @@ hosts:
     flavor: standard.large
     base_box:
       image: kali
-      mgmt_user: kali
+      mgmt_user: man
 
 routers:
   - name: r1
