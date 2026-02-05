@@ -1,104 +1,157 @@
 ---
-- hosts: ubuntu-desktop
+- name: Configure Ubuntu desktop + Guacamole-compatible XVNC (port 5900) via XDMCP
+  hosts: ubuntu-desktop
   become: true
+
   vars:
+    mgmt_user: ubuntu
     desktop_user: student
-    desktop_pass: "ChangeMe-SSH"
-    vnc_pass: "ChangeMe-VNC"
-    vnc_display: "1"
-    vnc_geometry: "1280x800"
+    desktop_pass_plain: "ChangeMe-SSH"
+    xvnc_geometry: "1920x1080"
+    xvnc_security_types: "None"
+    lightdm_xdmcp_conf: "/etc/lightdm/lightdm.conf.d/50-xdmcp.conf"
+
+  handlers:
+    - name: daemon reload
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: restart lightdm
+      ansible.builtin.service:
+        name: lightdm
+        state: restarted
 
   tasks:
-    - name: Install desktop, VNC, and SSH packages
+    - name: Install desktop + display manager + Xorg + TigerVNC (Xvnc)
       ansible.builtin.apt:
         update_cache: true
         name:
           - xfce4
           - xfce4-goodies
           - dbus-x11
+          - lightdm
+          - lightdm-gtk-greeter
+          - xserver-xorg-core
+          - xserver-xorg-video-all
+          - xserver-xorg-input-all
+          - xinit
           - tigervnc-standalone-server
           - tigervnc-common
           - openssh-server
-          - xauth
         state: present
 
-    - name: Create desktop user with sudo
+    - name: Create desktop user with sudo (optional)
       ansible.builtin.user:
         name: "{{ desktop_user }}"
         groups: sudo
         append: true
         shell: /bin/bash
         create_home: true
-        password: "{{ desktop_pass | password_hash('sha512') }}"
+        password: "{{ desktop_pass_plain | password_hash('sha512') }}"
 
-    - name: Enable SSH password authentication
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^PasswordAuthentication\s+'
-        line: 'PasswordAuthentication yes'
-
-    - name: Restart SSH
-      ansible.builtin.service:
-        name: ssh
-        state: restarted
-
-    - name: Create VNC directory
-      ansible.builtin.file:
-        path: "/home/{{ desktop_user }}/.vnc"
-        state: directory
-        owner: "{{ desktop_user }}"
-        group: "{{ desktop_user }}"
-        mode: "0700"
-
-    - name: Set VNC xstartup to XFCE
+    - name: Ensure LightDM is the default display manager
       ansible.builtin.copy:
-        dest: "/home/{{ desktop_user }}/.vnc/xstartup"
-        owner: "{{ desktop_user }}"
-        group: "{{ desktop_user }}"
-        mode: "0755"
-        content: |
-          #!/bin/sh
-          unset SESSION_MANAGER
-          unset DBUS_SESSION_BUS_ADDRESS
-          exec startxfce4
+        dest: /etc/X11/default-display-manager
+        mode: "0644"
+        content: "/usr/sbin/lightdm\n"
+      notify: restart lightdm
 
-    - name: Set VNC password (non-interactive)
+    - name: Enable XDMCP in LightDM (needed for Xvnc -query localhost)
+      ansible.builtin.copy:
+        dest: "{{ lightdm_xdmcp_conf }}"
+        mode: "0644"
+        content: |
+          [XDMCPServer]
+          enabled=true
+          port=177
+
+          [Seat:*]
+          user-session=xfce
+      notify: restart lightdm
+
+    - name: Stop and disable TigerVNC vncserver@ services if present
+      ansible.builtin.systemd:
+        name: "vncserver@1.service"
+        enabled: false
+        state: stopped
+      ignore_errors: true
+
+    - name: Mask TigerVNC vncserver@ template to prevent it coming back
+      ansible.builtin.command: systemctl mask vncserver@.service
+      changed_when: false
+      failed_when: false
+
+    - name: Disable any leftover socat forwarder service if present
+      ansible.builtin.systemd:
+        name: vnc5900-forward.service
+        enabled: false
+        state: stopped
+      ignore_errors: true
+
+    - name: Kill any stray socat listener on TCP/5900 (best-effort)
       ansible.builtin.shell: |
         set -e
-        printf '%s\n' "{{ vnc_pass }}" | vncpasswd -f > "/home/{{ desktop_user }}/.vnc/passwd"
-        chown "{{ desktop_user }}:{{ desktop_user }}" "/home/{{ desktop_user }}/.vnc/passwd"
-        chmod 0600 "/home/{{ desktop_user }}/.vnc/passwd"
+        pids="$(ss -lntp '( sport = :5900 )' 2>/dev/null | awk -F'pid=|,' '/pid=/ {print $2}' | sort -u)"
+        if [ -n "$pids" ]; then
+          kill $pids || true
+        fi
       args:
         executable: /bin/bash
+      changed_when: false
+      failed_when: false
 
-    - name: Install systemd unit for per-user VNC service
+    - name: Write xvnc.socket (systemd socket activation on port 5900)
       ansible.builtin.copy:
-        dest: /etc/systemd/system/vncserver@.service
+        dest: /etc/systemd/system/xvnc.socket
         mode: "0644"
         content: |
           [Unit]
-          Description=TigerVNC server on display %i
-          After=network.target
+          Description=XVNC Server on port 5900
 
-          [Service]
-          Type=simple
-          User={{ desktop_user }}
-          WorkingDirectory=/home/{{ desktop_user }}
-          ExecStartPre=/usr/bin/vncserver -kill :%i || true
-          ExecStart=/usr/bin/vncserver :%i -fg -geometry {{ vnc_geometry }} -depth 24 -localhost no
-          ExecStop=/usr/bin/vncserver -kill :%i
-          Restart=on-failure
-          RestartSec=2
+          [Socket]
+          ListenStream=5900
+          Accept=yes
 
           [Install]
-          WantedBy=multi-user.target
+          WantedBy=sockets.target
+      notify: daemon reload
 
-    - name: Reload systemd
-      ansible.builtin.systemd:
-        daemon_reload: true
+    - name: Write xvnc@.service (spawn Xvnc per connection via inetd mode)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/xvnc@.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Daemon for each XVNC connection
 
-    - name: Enable and start VNC service
+          [Service]
+          ExecStart=-/usr/bin/Xvnc -inetd -query localhost -geometry {{ xvnc_geometry }} -once -SecurityTypes={{ xvnc_security_types }}
+          User=nobody
+          StandardInput=socket
+          StandardError=journal
+      notify: daemon reload
+
+    - name: Ensure LightDM is running (provides XDMCP on UDP/177)
+      ansible.builtin.service:
+        name: lightdm
+        state: started
+        enabled: false
+      ignore_errors: false
+
+    - name: Enable and start xvnc.socket
       ansible.builtin.systemd:
-        name: "vncserver@{{ vnc_display }}.service"
+        name: xvnc.socket
         enabled: true
         state: started
+
+    - name: Show listening state (debug)
+      ansible.builtin.shell: |
+        set -e
+        echo "=== TCP listeners (5900/5901) ==="
+        ss -lntp | egrep ':(5900|5901)\b' || true
+        echo
+        echo "=== UDP listener (177) ==="
+        ss -lunp | egrep ':(177)\b' || true
+      args:
+        executable: /bin/bash
+      changed_when: false
