@@ -38,6 +38,7 @@
           - tigervnc-standalone-server
           - tigervnc-common
           - openssh-server
+          - firefox
         state: present
 
     - name: Create desktop user with sudo (optional)
