@@ -30,6 +30,6 @@ router_mappings:
     ip: 10.10.10.1
 
 groups:
-  - name: ubuntu_desktop
+  - name: ubuntu-desktop
     nodes:
       - ubuntu-host
