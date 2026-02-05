@@ -1,4 +1,4 @@
-name: kali-generic-6.12.38+kali-amd64
+name: kali-generic-6.12.38
 
 hosts:
   - name: kali-host
