@@ -1,5 +1,5 @@
 ---
-- hosts: ubuntu_desktop
+- hosts: ubuntu-desktop
   become: true
   vars:
     desktop_user: student
