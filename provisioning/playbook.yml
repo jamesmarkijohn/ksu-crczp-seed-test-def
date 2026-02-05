@@ -1,1 +1,102 @@
-- hosts: all
+---
+- hosts: ubuntu_desktop
+  become: true
+  vars:
+    desktop_user: student
+    desktop_pass: "ChangeMe-SSH"
+    vnc_pass: "ChangeMe-VNC"
+    vnc_display: "1"
+    vnc_geometry: "1280x800"
+
+  tasks:
+    - name: Install desktop, VNC, and SSH packages
+      ansible.builtin.apt:
+        update_cache: true
+        name:
+          - xfce4
+          - xfce4-goodies
+          - dbus-x11
+          - tigervnc-standalone-server
+          - tigervnc-common
+          - openssh-server
+        state: present
+
+    - name: Create desktop user with sudo
+      ansible.builtin.user:
+        name: "{{ desktop_user }}"
+        groups: sudo
+        append: true
+        shell: /bin/bash
+        create_home: true
+        password: "{{ desktop_pass | password_hash('sha512') }}"
+
+    - name: Enable SSH password authentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication\s+'
+        line: 'PasswordAuthentication yes'
+
+    - name: Restart SSH
+      ansible.builtin.service:
+        name: ssh
+        state: restarted
+
+    - name: Create VNC directory
+      ansible.builtin.file:
+        path: "/home/{{ desktop_user }}/.vnc"
+        state: directory
+        owner: "{{ desktop_user }}"
+        group: "{{ desktop_user }}"
+        mode: "0700"
+
+    - name: Set VNC xstartup to XFCE
+      ansible.builtin.copy:
+        dest: "/home/{{ desktop_user }}/.vnc/xstartup"
+        owner: "{{ desktop_user }}"
+        group: "{{ desktop_user }}"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          unset SESSION_MANAGER
+          unset DBUS_SESSION_BUS_ADDRESS
+          exec startxfce4
+
+    - name: Set VNC password (non-interactive)
+      ansible.builtin.shell: |
+        set -e
+        printf '%s\n' "{{ vnc_pass }}" | vncpasswd -f > "/home/{{ desktop_user }}/.vnc/passwd"
+        chown "{{ desktop_user }}:{{ desktop_user }}" "/home/{{ desktop_user }}/.vnc/passwd"
+        chmod 0600 "/home/{{ desktop_user }}/.vnc/passwd"
+      args:
+        executable: /bin/bash
+
+    - name: Install systemd unit for per-user VNC service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/vncserver@.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=TigerVNC server on display %i
+          After=network.target
+
+          [Service]
+          Type=forking
+          User={{ desktop_user }}
+          PAMName=login
+          PIDFile=/home/{{ desktop_user }}/.vnc/%H:%i.pid
+          ExecStartPre=-/usr/bin/vncserver -kill :%i
+          ExecStart=/usr/bin/vncserver :%i -geometry {{ vnc_geometry }} -depth 24 -localhost no
+          ExecStop=/usr/bin/vncserver -kill :%i
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Enable and start VNC service
+      ansible.builtin.systemd:
+        name: "vncserver@{{ vnc_display }}.service"
+        enabled: true
+        state: started
