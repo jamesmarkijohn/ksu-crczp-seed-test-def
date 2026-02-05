@@ -1,5 +1,12 @@
 name: seed-gui-test
 
+hosts:
+  - name: ubuntu-host
+    flavor: standard.small
+    base_box:
+      image: ubuntu-20.04-server-cloudimg-amd64
+      mgmt_user: ubuntu
+
 routers:
   - name: r1
     flavor: standard.small
@@ -12,22 +19,15 @@ networks:
     cidr: 10.10.10.0/24
     accessible_by_user: true
 
-hosts:
-  - name: ubuntu-host
-    flavor: standard.small
-    base_box:
-      image: ubuntu-20.04-server-cloudimg-amd64
-      mgmt_user: ubuntu
+net_mappings:
+  - host: ubuntu-host
+    network: user-net
+    ip: 10.10.10.10
 
 router_mappings:
   - router: r1
     network: user-net
     ip: 10.10.10.1
-
-net_mappings:
-  - host: ubuntu-host
-    network: user-net
-    ip: 10.10.10.10
 
 groups:
   - name: ubuntu_desktop
