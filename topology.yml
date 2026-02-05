@@ -1,4 +1,4 @@
-name: ubuntu-20-04-generic
+name: ubuntu-20-04-seed-labs
 
 hosts:
   - name: ubuntu-host
