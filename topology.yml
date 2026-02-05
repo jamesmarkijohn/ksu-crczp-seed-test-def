@@ -1,8 +1,8 @@
-name: gui-test
+name: kali-generic-6.12.38+kali-amd64
 
 hosts:
   - name: kali-host
-    flavor: standard.large
+    flavor: standard.small
     base_box:
       image: kali
       mgmt_user: debian
