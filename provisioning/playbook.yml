@@ -19,6 +19,7 @@
           - tigervnc-standalone-server
           - tigervnc-common
           - openssh-server
+          - xauth
         state: present
 
     - name: Create desktop user with sudo
