@@ -80,13 +80,14 @@
           After=network.target
 
           [Service]
-          Type=forking
+          Type=simple
           User={{ desktop_user }}
-          PAMName=login
-          PIDFile=/home/{{ desktop_user }}/.vnc/%H:%i.pid
-          ExecStartPre=-/usr/bin/vncserver -kill :%i
-          ExecStart=/usr/bin/vncserver :%i -geometry {{ vnc_geometry }} -depth 24 -localhost no
+          WorkingDirectory=/home/{{ desktop_user }}
+          ExecStartPre=/usr/bin/vncserver -kill :%i || true
+          ExecStart=/usr/bin/vncserver :%i -fg -geometry {{ vnc_geometry }} -depth 24 -localhost no
           ExecStop=/usr/bin/vncserver -kill :%i
+          Restart=on-failure
+          RestartSec=2
 
           [Install]
           WantedBy=multi-user.target
