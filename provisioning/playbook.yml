@@ -4,15 +4,15 @@
   become: true
   vars:
     vnc_user: kali
-    vnc_password: "password"
+    vnc_password: "VNC_acc!"
     vnc_display: "1"
-    vnc_geometry: "1920x1080"
+    vnc_geometry: "1280x720"
     vnc_depth: "24"
     allow_vnc_nonlocal: true
     vnc_localhost_flag: "{{ '-localhost no' if allow_vnc_nonlocal else '-localhost yes' }}"
     vnc_cfg_dir: "/home/{{ vnc_user }}/.config/tigervnc"
-    gui_login_user: "kali-user"
-    gui_login_password: "password123"
+    gui_login_user: "standard-user"
+    gui_login_password: "#Ko5x!uN"
 
   tasks:
     - name: Install XFCE + TigerVNC
