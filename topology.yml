@@ -2,7 +2,7 @@ name: seed-gui-test
 
 hosts:
   - name: ubuntu-host
-    flavor: standard.small
+    flavor: standard.large
     base_box:
       image: ubuntu-20.04-server-cloudimg-amd64
       mgmt_user: ubuntu
@@ -11,8 +11,8 @@ routers:
   - name: r1
     flavor: standard.small
     base_box:
-      image: debian-12-x86_64
-      mgmt_user: debian
+      image: ubuntu-20.04-server-cloudimg-amd64
+      mgmt_user: ubuntu
 
 networks:
   - name: user-net
