@@ -6,8 +6,8 @@
   vars:
     mgmt_user: ubuntu
     desktop_user: student
-    desktop_pass_plain: "ChangeMe-SSH"
-    xvnc_geometry: "1920x1080"
+    desktop_pass_plain: "$dP%_sTu"
+    xvnc_geometry: "1280x720"
     xvnc_security_types: "None"
     lightdm_xdmcp_conf: "/etc/lightdm/lightdm.conf.d/50-xdmcp.conf"
 

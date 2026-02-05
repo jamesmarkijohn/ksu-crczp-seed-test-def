@@ -1,8 +1,8 @@
-name: seed-gui-test
+name: ubuntu-20-04-generic
 
 hosts:
   - name: ubuntu-host
-    flavor: standard.large
+    flavor: standard.small
     base_box:
       image: ubuntu-20.04-server-cloudimg-amd64
       mgmt_user: ubuntu
