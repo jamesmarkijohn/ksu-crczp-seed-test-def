@@ -11,8 +11,6 @@
     allow_vnc_nonlocal: true
     vnc_localhost_flag: "{{ '-localhost no' if allow_vnc_nonlocal else '-localhost yes' }}"
     vnc_cfg_dir: "/home/{{ vnc_user }}/.config/tigervnc"
-    gui_login_user: "standard-user"
-    gui_login_password: "#Ko5x!uN"
 
   tasks:
     - name: Install XFCE + TigerVNC
@@ -26,17 +24,6 @@
           - tigervnc-standalone-server
           - tigervnc-common
         state: present
-
-    - name: Create GUI login user
-      ansible.builtin.user:
-        name: "{{ gui_login_user }}"
-        shell: /bin/bash
-        create_home: true
-        groups: sudo
-        append: true
-
-    - name: Set GUI login user password
-      ansible.builtin.command: bash -lc "echo '{{ gui_login_user }}:{{ gui_login_password }}' | chpasswd"
 
     - name: Ensure TigerVNC config dir exists
       ansible.builtin.file:
