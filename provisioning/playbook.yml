@@ -13,114 +13,114 @@
     vnc_cfg_dir: "/home/{{ vnc_user }}/.config/tigervnc"
 
   tasks:
-  - name: Ensure login user exists for CRCZP user SSH access
-      ansible.builtin.user:
-        name: user
-        shell: /bin/bash
-        create_home: true
+    - name: Ensure login user exists for CRCZP user SSH access
+        ansible.builtin.user:
+          name: user
+          shell: /bin/bash
+          create_home: true
+    
+    - name: Allow CRCZP-generated user key for the login user
+        ansible.builtin.authorized_key:
+          user: user
+          state: present
+          key: "{{ lookup('file', global_ssh_public_user_key) }}"
+    
+      - name: Install XFCE + TigerVNC
+        ansible.builtin.apt:
+          update_cache: true
+          name:
+            - xfce4
+            - xfce4-goodies
+            - dbus-x11
+            - xauth
+            - tigervnc-standalone-server
+            - tigervnc-common
+          state: present
   
-  - name: Allow CRCZP-generated user key for the login user
-      ansible.builtin.authorized_key:
-        user: user
-        state: present
-        key: "{{ lookup('file', global_ssh_public_user_key) }}"
+      - name: Ensure TigerVNC config dir exists
+        ansible.builtin.file:
+          path: "{{ vnc_cfg_dir }}"
+          state: directory
+          owner: "{{ vnc_user }}"
+          group: "{{ vnc_user }}"
+          mode: "0700"
   
-    - name: Install XFCE + TigerVNC
-      ansible.builtin.apt:
-        update_cache: true
-        name:
-          - xfce4
-          - xfce4-goodies
-          - dbus-x11
-          - xauth
-          - tigervnc-standalone-server
-          - tigervnc-common
-        state: present
-
-    - name: Ensure TigerVNC config dir exists
-      ansible.builtin.file:
-        path: "{{ vnc_cfg_dir }}"
-        state: directory
-        owner: "{{ vnc_user }}"
-        group: "{{ vnc_user }}"
-        mode: "0700"
-
-    - name: Ensure ~/.vnc exists
-      ansible.builtin.file:
-        path: "/home/{{ vnc_user }}/.vnc"
-        state: directory
-        owner: "{{ vnc_user }}"
-        group: "{{ vnc_user }}"
-        mode: "0700"
-
-    - name: Set VNC password file
-      ansible.builtin.shell: |
-        set -euo pipefail
-        printf "%s\n" "{{ vnc_password }}" | vncpasswd -f > "{{ vnc_cfg_dir }}/passwd"
-        chown "{{ vnc_user }}:{{ vnc_user }}" "{{ vnc_cfg_dir }}/passwd"
-        chmod 0600 "{{ vnc_cfg_dir }}/passwd"
-      args:
-        executable: /bin/bash
-
-    - name: Set xstartup to launch XFCE (with dbus-launch)
-      ansible.builtin.copy:
-        dest: "{{ vnc_cfg_dir }}/xstartup"
-        owner: "{{ vnc_user }}"
-        group: "{{ vnc_user }}"
-        mode: "0755"
-        content: |
-          #!/bin/sh
-          unset SESSION_MANAGER
-          unset DBUS_SESSION_BUS_ADDRESS
-          exec dbus-launch --exit-with-session startxfce4
-
-    - name: Remove stale VNC/X locks for display :{{ vnc_display }}
-      ansible.builtin.shell: |
-        rm -f /tmp/.X{{ vnc_display }}-lock /tmp/.X11-unix/X{{ vnc_display }} || true
-        rm -f /home/{{ vnc_user }}/.vnc/*:{{ vnc_display }}.pid || true
-        rm -f {{ vnc_cfg_dir }}/*:{{ vnc_display }}.pid || true
-      args:
-        executable: /bin/bash
-      changed_when: false
-
-    - name: Install vncserver@.service
-      ansible.builtin.copy:
-        dest: /etc/systemd/system/vncserver@.service
-        owner: root
-        group: root
-        mode: "0644"
-        content: |
-          [Unit]
-          Description=TigerVNC server on display :%i
-          After=network.target
-
-          [Service]
-          Type=simple
-          User={{ vnc_user }}
-          PAMName=login
-          WorkingDirectory=/home/{{ vnc_user }}
-
-          ExecStartPre=-/usr/bin/vncserver -kill :%i
-          ExecStart=/usr/bin/vncserver :%i -fg -geometry {{ vnc_geometry }} -depth {{ vnc_depth }} {{ vnc_localhost_flag }}
-          ExecStop=/usr/bin/vncserver -kill :%i
-
-          Restart=on-failure
-          RestartSec=2
-
-          [Install]
-          WantedBy=multi-user.target
-
-    - name: Reload systemd
-      ansible.builtin.systemd:
-        daemon_reload: true
-
-    - name: Start VNC on :{{ vnc_display }} (TCP 590{{ vnc_display }}) with diagnostics on failure
-      block:
-        - name: Start VNC service
-          ansible.builtin.systemd:
-            name: "vncserver@{{ vnc_display }}"
-            state: started
-            enabled: true
+      - name: Ensure ~/.vnc exists
+        ansible.builtin.file:
+          path: "/home/{{ vnc_user }}/.vnc"
+          state: directory
+          owner: "{{ vnc_user }}"
+          group: "{{ vnc_user }}"
+          mode: "0700"
+  
+      - name: Set VNC password file
+        ansible.builtin.shell: |
+          set -euo pipefail
+          printf "%s\n" "{{ vnc_password }}" | vncpasswd -f > "{{ vnc_cfg_dir }}/passwd"
+          chown "{{ vnc_user }}:{{ vnc_user }}" "{{ vnc_cfg_dir }}/passwd"
+          chmod 0600 "{{ vnc_cfg_dir }}/passwd"
+        args:
+          executable: /bin/bash
+  
+      - name: Set xstartup to launch XFCE (with dbus-launch)
+        ansible.builtin.copy:
+          dest: "{{ vnc_cfg_dir }}/xstartup"
+          owner: "{{ vnc_user }}"
+          group: "{{ vnc_user }}"
+          mode: "0755"
+          content: |
+            #!/bin/sh
+            unset SESSION_MANAGER
+            unset DBUS_SESSION_BUS_ADDRESS
+            exec dbus-launch --exit-with-session startxfce4
+  
+      - name: Remove stale VNC/X locks for display :{{ vnc_display }}
+        ansible.builtin.shell: |
+          rm -f /tmp/.X{{ vnc_display }}-lock /tmp/.X11-unix/X{{ vnc_display }} || true
+          rm -f /home/{{ vnc_user }}/.vnc/*:{{ vnc_display }}.pid || true
+          rm -f {{ vnc_cfg_dir }}/*:{{ vnc_display }}.pid || true
+        args:
+          executable: /bin/bash
+        changed_when: false
+  
+      - name: Install vncserver@.service
+        ansible.builtin.copy:
+          dest: /etc/systemd/system/vncserver@.service
+          owner: root
+          group: root
+          mode: "0644"
+          content: |
+            [Unit]
+            Description=TigerVNC server on display :%i
+            After=network.target
+  
+            [Service]
+            Type=simple
+            User={{ vnc_user }}
+            PAMName=login
+            WorkingDirectory=/home/{{ vnc_user }}
+  
+            ExecStartPre=-/usr/bin/vncserver -kill :%i
+            ExecStart=/usr/bin/vncserver :%i -fg -geometry {{ vnc_geometry }} -depth {{ vnc_depth }} {{ vnc_localhost_flag }}
+            ExecStop=/usr/bin/vncserver -kill :%i
+  
+            Restart=on-failure
+            RestartSec=2
+  
+            [Install]
+            WantedBy=multi-user.target
+  
+      - name: Reload systemd
+        ansible.builtin.systemd:
+          daemon_reload: true
+  
+      - name: Start VNC on :{{ vnc_display }} (TCP 590{{ vnc_display }}) with diagnostics on failure
+        block:
+          - name: Start VNC service
+            ansible.builtin.systemd:
+              name: "vncserver@{{ vnc_display }}"
+              state: started
+              enabled: true
 
       rescue:
         - name: systemctl status vncserver@{{ vnc_display }}
