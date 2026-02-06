@@ -19,6 +19,11 @@
         name: lightdm
         state: restarted
 
+    - name: restart ssh
+      ansible.builtin.service:
+        name: ssh
+        state: restarted
+
   tasks:
     - name: Install desktop + display manager + Xorg + TigerVNC (Xvnc)
       ansible.builtin.apt:
@@ -38,6 +43,53 @@
           - openssh-server
           - firefox
         state: present
+
+    - name: Ensure ssh service is running
+      ansible.builtin.service:
+        name: ssh
+        state: started
+        enabled: true
+
+    - name: Ensure bootstrap SSH user exists (CRCZP key-based access)
+      ansible.builtin.user:
+        name: user
+        shell: /bin/bash
+        create_home: true
+        groups: sudo
+        append: true
+
+    - name: Allow CRCZP-generated SSH public key for bootstrap user
+      ansible.builtin.authorized_key:
+        user: user
+        state: present
+        key: "{{ lookup('file', global_ssh_public_user_key) }}"
+
+    - name: Allow passwordless sudo for bootstrap user (no password set)
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/90-crczp-bootstrap-user
+        owner: root
+        group: root
+        mode: "0440"
+        content: |
+          user ALL=(ALL) NOPASSWD:ALL
+
+    - name: Disable password-based SSH authentication
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/90-crczp-keyonly.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          ChallengeResponseAuthentication no
+          PubkeyAuthentication yes
+      notify: restart ssh
+
+    - name: Lock password login for default accounts (no default credentials)
+      ansible.builtin.user:
+        name: "{{ mgmt_user }}"
+        password_lock: true
 
     - name: Ensure LightDM is the default display manager
       ansible.builtin.copy:
