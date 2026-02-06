@@ -193,3 +193,60 @@
       args:
         executable: /bin/bash
       changed_when: false
+
+      
+    - name: Install prerequisites for SEED Labs download/unzip and add-apt-repository
+      ansible.builtin.apt:
+        update_cache: true
+        name:
+          - ca-certificates
+          - curl
+          - unzip
+          - software-properties-common
+        state: present
+
+    - name: Download SEED Labs repository ZIP
+      ansible.builtin.get_url:
+        url: https://github.com/seed-labs/seed-labs/archive/refs/heads/master.zip
+        dest: /tmp/seed-labs-master.zip
+        mode: "0644"
+        force: true
+
+    - name: Extract SEED Labs ZIP to /opt
+      ansible.builtin.unarchive:
+        src: /tmp/seed-labs-master.zip
+        dest: /opt
+        remote_src: true
+
+    - name: Remove wireshark.sh in SEED Labs ubuntu20.04-vm src-vm directory
+      ansible.builtin.file:
+        path: /opt/seed-labs-master/lab-setup/ubuntu20.04-vm/src-vm/wireshark.sh
+        state: absent
+
+    - name: Execute main.sh in SEED Labs ubuntu20.04-vm src-vm directory
+      ansible.builtin.shell: |
+        set -e
+        cd /opt/seed-labs-master/lab-setup/ubuntu20.04-vm/src-vm
+        chmod +x main.sh
+        ./main.sh
+      args:
+        executable: /bin/bash
+
+    - name: Preseed wireshark-common setuid prompt
+      ansible.builtin.shell: |
+        echo "wireshark-common wireshark-common/install-setuid boolean true" | sudo debconf-set-selections
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Add Wireshark stable PPA
+      ansible.builtin.command: sudo add-apt-repository ppa:wireshark-dev/stable -y
+      changed_when: false
+
+    - name: Install Wireshark non-interactively
+      ansible.builtin.shell: |
+        set -e
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -y install wireshark
+      args:
+        executable: /bin/bash
