@@ -13,6 +13,18 @@
     vnc_cfg_dir: "/home/{{ vnc_user }}/.config/tigervnc"
 
   tasks:
+  - name: Ensure login user exists for CRCZP user SSH access
+      ansible.builtin.user:
+        name: user
+        shell: /bin/bash
+        create_home: true
+  
+  - name: Allow CRCZP-generated user key for the login user
+      ansible.builtin.authorized_key:
+        user: user
+        state: present
+        key: "{{ lookup('file', global_ssh_public_user_key) }}"
+  
     - name: Install XFCE + TigerVNC
       ansible.builtin.apt:
         update_cache: true
