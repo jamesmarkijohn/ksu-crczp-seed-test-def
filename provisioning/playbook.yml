@@ -5,8 +5,6 @@
 
   vars:
     mgmt_user: ubuntu
-    desktop_user: student
-    desktop_pass_plain: "$dP%_sTu"
     xvnc_geometry: "1280x720"
     xvnc_security_types: "None"
     lightdm_xdmcp_conf: "/etc/lightdm/lightdm.conf.d/50-xdmcp.conf"
@@ -40,15 +38,6 @@
           - openssh-server
           - firefox
         state: present
-
-    - name: Create desktop user with sudo (optional)
-      ansible.builtin.user:
-        name: "{{ desktop_user }}"
-        groups: sudo
-        append: true
-        shell: /bin/bash
-        create_home: true
-        password: "{{ desktop_pass_plain | password_hash('sha512') }}"
 
     - name: Ensure LightDM is the default display manager
       ansible.builtin.copy:
