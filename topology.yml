@@ -1,7 +1,17 @@
-name: ubuntu-20-04-seed-labs
+name: seed-netsec-packet-sniffing-spoofing
 
 hosts:
-  - name: ubuntu-host
+  - name: attacker
+    flavor: standard.small
+    base_box:
+      image: ubuntu-20.04-server-cloudimg-amd64
+      mgmt_user: ubuntu
+  - name: hostA
+    flavor: standard.small
+    base_box:
+      image: ubuntu-20.04-server-cloudimg-amd64
+      mgmt_user: ubuntu
+  - name: hostB
     flavor: standard.small
     base_box:
       image: ubuntu-20.04-server-cloudimg-amd64
@@ -15,21 +25,29 @@ routers:
       mgmt_user: ubuntu
 
 networks:
-  - name: user-net
-    cidr: 10.10.10.0/24
+  - name: lab-net
+    cidr: 10.9.0.0/24
     accessible_by_user: true
 
 net_mappings:
-  - host: ubuntu-host
-    network: user-net
-    ip: 10.10.10.10
+  - host: attacker
+    network: lab-net
+    ip: 10.9.0.1
+  - host: hostA
+    network: lab-net
+    ip: 10.9.0.5
+  - host: hostB
+    network: lab-net
+    ip: 10.9.0.6
 
 router_mappings:
   - router: r1
-    network: user-net
-    ip: 10.10.10.1
+    network: lab-net
+    ip: 10.9.0.254
 
 groups:
-  - name: ubuntu-desktop
+  - name: ubuntu-hosts
     nodes:
-      - ubuntu-host
+      - attacker
+      - hostA
+      - hostB
