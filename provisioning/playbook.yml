@@ -1,6 +1,6 @@
 ---
 - name: Configure Ubuntu hosts for SEED Project sniffing and spoofing network security lab
-  hosts: ubuntu-desktop
+  hosts: attacker:hostA:hostB
   become: true
 
   vars:
