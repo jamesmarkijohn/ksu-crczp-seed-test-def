@@ -23,8 +23,8 @@
     - name: Create default user (for students)
       ansible.builtin.user:
         name: student
-        password: 'ubuntu'
-        group: sudo
+        password: "$6$TKe.ZbvdP2/FYrvs$HXs9Tz2TwDuKFFpcvVSL5m/oQkqB2OJKvPkCBF4TMf9plCtGo/vmwnPh9zqFvSCZQa.tbi8jwsHY8wia29hPZ0"
+        groups: sudo
         create_home: yes
         shell: /bin/bash
   
