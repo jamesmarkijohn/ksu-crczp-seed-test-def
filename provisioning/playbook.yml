@@ -1,5 +1,5 @@
 ---
-- name: Configure Ubuntu desktop + Guacamole-compatible XVNC (port 5900) via XDMCP
+- name: Configure Ubuntu hosts for SEED Project sniffing and spoofing network security lab
   hosts: ubuntu-desktop
   become: true
 
@@ -20,6 +20,14 @@
         state: restarted
 
   tasks:
+    - name: Create default user (for students)
+      ansible.builtin.user:
+        name: student
+        password: 'ubuntu'
+        group: sudo
+        create_home: yes
+        shell: /bin/bash
+  
     - name: Install desktop + display manager + Xorg + TigerVNC (Xvnc)
       ansible.builtin.apt:
         update_cache: true
