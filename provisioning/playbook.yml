@@ -37,7 +37,26 @@
           - tigervnc-common
           - openssh-server
           - firefox
+          - python3-scapy
+          - python3-cryptography
         state: present
+
+    - name: Uninstall scapy and cryptography via pip3 (was breaking py3 scapy)
+      ansible.builtin.pip:
+        name:
+          - scapy
+          - cryptography
+        state: absent
+        executable: pip3
+
+    - name: Create seed user with sudo access
+      ansible.builtin.user:
+      name: seed
+      password: "{{ 'dees' | password_hash('sha512') }"
+      groups: sudo
+      append: true
+      shell: /bin/bash
+      create_home: true
 
     - name: Ensure LightDM is the default display manager
       ansible.builtin.copy:
