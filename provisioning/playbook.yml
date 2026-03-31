@@ -39,6 +39,7 @@
           - firefox
           - python3-scapy
           - python3-cryptography
+          - python3-pip
         state: present
 
     - name: Uninstall scapy and cryptography via pip3 (was breaking py3 scapy)
