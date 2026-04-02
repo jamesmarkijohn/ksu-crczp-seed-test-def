@@ -20,14 +20,6 @@
         state: restarted
 
   tasks:
-    - name: Create default user (for students)
-      ansible.builtin.user:
-        name: student
-        password: "$6$TKe.ZbvdP2/FYrvs$HXs9Tz2TwDuKFFpcvVSL5m/oQkqB2OJKvPkCBF4TMf9plCtGo/vmwnPh9zqFvSCZQa.tbi8jwsHY8wia29hPZ0"
-        groups: sudo
-        create_home: yes
-        shell: /bin/bash
-  
     - name: Install desktop + display manager + Xorg + TigerVNC (Xvnc)
       ansible.builtin.apt:
         update_cache: true
@@ -45,7 +37,30 @@
           - tigervnc-common
           - openssh-server
           - firefox
+          - python3-scapy
+          - python3-cryptography
+          - python3-pip
         state: present
+
+    - name: Uninstall scapy and cryptography via pip3 (was breaking py3 scapy)
+      ansible.builtin.pip:
+        name:
+          - scapy
+          - cryptography
+        state: absent
+        executable: pip3
+
+    - name: Create seed user with sudo access
+      ansible.builtin.user:
+        name: seed
+        groups: sudo
+        append: true
+        shell: /bin/bash
+        create_home: true
+
+    - name: Set password for seed user
+      ansible.builtin.shell: echo 'seed:dees' | chpasswd
+      changed_when: false
 
     - name: Ensure LightDM is the default display manager
       ansible.builtin.copy:
