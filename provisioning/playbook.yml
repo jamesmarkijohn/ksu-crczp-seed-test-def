@@ -42,14 +42,6 @@
           - python3-pip
         state: present
 
-    - name: Uninstall scapy and cryptography via pip3 (was breaking py3 scapy)
-      ansible.builtin.pip:
-        name:
-          - scapy
-          - cryptography
-        state: absent
-        executable: pip3
-
     - name: Create seed user with sudo access
       ansible.builtin.user:
         name: seed
@@ -224,3 +216,11 @@
         sudo DEBIAN_FRONTEND=noninteractive apt-get -y install wireshark
       args:
         executable: /bin/bash
+
+    - name: Uninstall scapy and cryptography via pip3 (was breaking py3 scapy)
+      ansible.builtin.pip:
+        name:
+          - scapy
+          - cryptography
+        state: absent
+        executable: pip3
